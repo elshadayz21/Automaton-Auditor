@@ -16,6 +16,12 @@ class Evidence(BaseModel):
     source: str = Field(description="Source of the evidence — URL, file path, or document name")
     reliability_score: float = Field(description="Confidence score for this evidence (0.0 = uncertain, 1.0 = definitive)", ge=0.0, le=1.0)
 
+class EvidenceList(BaseModel):
+    """
+    Schema for a list of Evidence items, used for batched LLM output.
+    """
+    evidences: list[Evidence] = Field(description="List of factual evidence items")
+
 class JudicialOpinion(BaseModel):
     """
     Schema representing a judicial opinion or argument provided by an agent.

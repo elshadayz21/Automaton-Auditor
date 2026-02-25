@@ -9,7 +9,7 @@ load_dotenv()  # Load .env before any LLM client is created
 
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
-from src.state import AgentState, Evidence
+from src.state import AgentState, Evidence, EvidenceList
 from src.tools.repo_tools import clone_repository, analyze_graph_structure, extract_git_history
 from src.tools.doc_tools import ingest_pdf
 
@@ -91,7 +91,7 @@ _REPO_CHECKS = [
 def RepoInvestigator(state: AgentState) -> dict[str, Any]:
     """
     Forensic repository investigator.
-    Produces three distinct Evidence items per repo:
+    Produces three distinct Evidence items per repo in a single batched LLM call:
       1. graph_wiring  — node/edge connectivity
       2. state_design  — TypedDict + reducer usage
       3. tool_safety   — error handling & input validation
@@ -106,22 +106,25 @@ def RepoInvestigator(state: AgentState) -> dict[str, Any]:
         print(f"No target_repo_url in rubric. Using fallback: {target_repo_url}")
 
     evidences: dict[str, Evidence] = {}
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0).with_structured_output(Evidence)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0).with_structured_output(EvidenceList)
 
     try:
         with clone_repository(target_repo_url) as repo_dir:
             structure = analyze_graph_structure(repo_dir)
-            structure_str = json.dumps(structure, indent=2)[:2000]
+            structure_str = json.dumps(structure, indent=2)[:3000]
             history = extract_git_history(repo_dir, max_commits=10)
             history_str = json.dumps(history, indent=2)[:2000]
 
-            for check in _REPO_CHECKS:
-                prompt_text = f"""You are a Forensic Code Investigator. Your mandate is strictly factual observation.
+            combined_instruction = "\n\n".join([f"CHECK {i+1}: {c['goal']}\n{c['instruction']}" for i, c in enumerate(_REPO_CHECKS)])
+
+            prompt_text = f"""You are a Forensic Code Investigator. Your mandate is strictly factual observation.
 Do NOT provide opinions, rulings, or final decisions.
 
-GOAL (what to look for): {check['goal']}
+Your task is to perform THREE distinct forensic checks in this single response.
 
-FORENSIC INSTRUCTION: {check['instruction']}
+---
+{combined_instruction}
+---
 
 Repository Source: {target_repo_url}
 
@@ -131,20 +134,24 @@ AST Class/Function Structure (truncated):
 Recent Commit History (truncated):
 {history_str}
 
-Populate EVERY field of the Evidence record:
-- goal: restate what you were asked to find
-- found: exactly what you observed (or "Not found" if absent)
-- location: file paths / function names / commit hashes where evidence was found
+For EACH check, populate a full Evidence record in the 'evidences' list:
+- goal: restate the specific check's goal
+- found: exactly what you observed for that check
+- location: file paths / function names for that check
 - rationale: why this matters forensically
-- content: detailed raw notes
+- content: detailed raw notes for this check
 - source: {target_repo_url}
 - reliability_score: 0.0–1.0 based on how clearly the AST/history confirms your finding
-- evidence_id: generate a unique UUID string
+- evidence_id: generate a unique ID like 'repo-wiring', 'repo-state', 'repo-safety'
 """
-                evidence = _invoke_with_retry(llm, [HumanMessage(content=prompt_text)], label=check["key"])
-                evidence = _ensure_id(evidence, f"repo-{check['key']}")
-                evidences[evidence.evidence_id] = evidence
-                print(f"  ✓ Collected evidence: {check['key']} ({evidence.evidence_id})")
+            batch_result = _invoke_with_retry(llm, [HumanMessage(content=prompt_text)], label="repo-batch")
+            
+            for ev in batch_result.evidences:
+                # Basic validation/cleanup
+                if not ev.evidence_id:
+                    ev.evidence_id = f"repo-{uuid.uuid4().hex[:8]}"
+                evidences[ev.evidence_id] = ev
+                print(f"  ✓ Collected batched evidence: {ev.evidence_id}")
 
     except Exception as e:
         print(f"RepoInvestigator failed: {e}")
