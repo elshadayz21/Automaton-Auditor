@@ -1,0 +1,10 @@
+[project]
+name = "automaton-auditor"
+version = "0.1.0"
+description = "Multi-agent forensic auditor"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph",
+    "pydantic",
+]
