@@ -1,0 +1,14 @@
+{
+  "dimensions": [
+    {
+      "target_artifact": "github_repo",
+      "forensic_instruction": "Identify the primary programming languages used and the overall directory structure.",
+      "target_repo_url": "https://github.com/langchain-ai/langgraph.git"
+    },
+    {
+      "target_artifact": "pdf_report",
+      "forensic_instruction": "Extract the executive summary and key findings.",
+      "target_pdf_path": "sample.pdf"
+    }
+  ]
+}
