@@ -1,8 +1,13 @@
 import json
 import uuid
+import time
 from typing import Any
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before any OpenAI client is created
+
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+import google.api_core.exceptions
 from src.state import AgentState, Evidence
 from src.tools.repo_tools import clone_repository, analyze_graph_structure, extract_git_history
 from src.tools.doc_tools import ingest_pdf
@@ -42,7 +47,7 @@ def RepoInvestigator(state: AgentState) -> dict[str, Any]:
     evidences = {}
     
     # Strictly factual data collection using LLM with structured output
-    llm = ChatOpenAI(model="gpt-4o", temperature=0).with_structured_output(Evidence)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0).with_structured_output(Evidence)
     
     try:
         # Step 1: Clone the repository safely
@@ -50,11 +55,11 @@ def RepoInvestigator(state: AgentState) -> dict[str, Any]:
             
             # Step 2: Use AST Parser to analyze the structure
             structure = analyze_graph_structure(repo_dir)
-            structure_str = json.dumps(structure, indent=2)[:5000] # Truncate for context window
+            structure_str = json.dumps(structure, indent=2)[:2000] # Truncate for context window
             
-            # Step 3: Extract Git History
-            history = extract_git_history(repo_dir, max_commits=20)
-            history_str = json.dumps(history, indent=2)
+            # Step 3: Extract Git History (limit commits to reduce token usage)
+            history = extract_git_history(repo_dir, max_commits=10)
+            history_str = json.dumps(history, indent=2)[:2000]
             
             # Step 4: Evaluate each matching rubric instruction
             for instruction in instructions:
@@ -77,7 +82,18 @@ def RepoInvestigator(state: AgentState) -> dict[str, Any]:
                 The reliability_score MUST be a float between 0.0 and 1.0 based on how clear the evidence is in the AST/History.
                 """
                 
-                evidence = llm.invoke([HumanMessage(content=prompt_text)])
+                # Retry up to 3 times with exponential backoff on rate-limit errors
+                for attempt in range(3):
+                    try:
+                        evidence = llm.invoke([HumanMessage(content=prompt_text)])
+                        break
+                    except Exception as retry_err:
+                        if "RESOURCE_EXHAUSTED" in str(retry_err) and attempt < 2:
+                            wait = 30 * (attempt + 1)
+                            print(f"Rate limited. Retrying in {wait}s...")
+                            time.sleep(wait)
+                        else:
+                            raise
                 
                 # Ensure a unique ID if the LLM failed to generate a random one
                 if not evidence.evidence_id or evidence.evidence_id == "uuid":
@@ -108,7 +124,7 @@ def DocAnalyst(state: AgentState) -> dict[str, Any]:
         return {"evidences": {}}
         
     evidences = {}
-    llm = ChatOpenAI(model="gpt-4o", temperature=0).with_structured_output(Evidence)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0).with_structured_output(Evidence)
     
     try:
         # Step 1: Ingest and chunk the PDF
