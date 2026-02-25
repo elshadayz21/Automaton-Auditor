@@ -5,11 +5,16 @@ from pydantic import BaseModel, Field
 class Evidence(BaseModel):
     """
     Schema representing a piece of evidence collected during the audit.
+    Enriched with forensic-grade fields for traceability.
     """
     evidence_id: str = Field(description="Unique identifier for the evidence")
-    content: str = Field(description="Detailed content or description of the evidence")
-    source: str = Field(description="Source of the evidence document or data")
-    reliability_score: float = Field(description="Score indicating reliability of this evidence (0.0 to 1.0)", ge=0.0, le=1.0)
+    goal: str = Field(description="What the rubric dimension was looking for")
+    found: str = Field(description="What was actually observed in the source artifact")
+    location: str = Field(description="Where in the codebase or document this was found (file path, section, commit, etc.)")
+    rationale: str = Field(description="Why this observation is significant as evidence")
+    content: str = Field(description="Full detailed content or raw description of the evidence")
+    source: str = Field(description="Source of the evidence — URL, file path, or document name")
+    reliability_score: float = Field(description="Confidence score for this evidence (0.0 = uncertain, 1.0 = definitive)", ge=0.0, le=1.0)
 
 class JudicialOpinion(BaseModel):
     """
