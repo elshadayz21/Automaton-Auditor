@@ -56,45 +56,10 @@ def _ensure_id(evidence: Evidence, prefix: str) -> Evidence:
 # Node 1: RepoInvestigator
 # ─────────────────────────────────────────────
 
-# Three distinct forensic lenses applied to every repo
-_REPO_CHECKS = [
-    {
-        "key": "graph_wiring",
-        "goal": "Verify that LangGraph nodes are correctly wired — edges defined, entry/exit points set, and the graph compiles without errors.",
-        "instruction": (
-            "Inspect the AST structure and commit history for LangGraph graph definitions. "
-            "Look for StateGraph instantiation, add_node / add_edge / set_entry_point calls, "
-            "and graph.compile() usage. Report exactly which files/functions contain these constructs."
-        ),
-    },
-    {
-        "key": "state_design",
-        "goal": "Verify the AgentState uses TypedDict with annotated reducers (operator.add / operator.ior) for safe parallel state merging.",
-        "instruction": (
-            "Inspect the AST for TypedDict subclasses and Annotated type hints. "
-            "Look for operator.add or operator.ior as reducer annotations. "
-            "Report which state fields use reducers and which do not."
-        ),
-    },
-    {
-        "key": "tool_safety",
-        "goal": "Verify that tool functions include input validation, try/except error handling, and do not expose secrets or raw exceptions to callers.",
-        "instruction": (
-            "Inspect function definitions in the tools directory from the AST. "
-            "Check for try/except blocks, parameter type hints, and any hardcoded credentials or bare `except` clauses. "
-            "Report specific findings per function."
-        ),
-    },
-]
-
-
 def RepoInvestigator(state: AgentState) -> dict[str, Any]:
     """
     Forensic repository investigator.
-    Produces three distinct Evidence items per repo in a single batched LLM call:
-      1. graph_wiring  — node/edge connectivity
-      2. state_design  — TypedDict + reducer usage
-      3. tool_safety   — error handling & input validation
+    Produces Evidence items per repo in a batched LLM call based on the rubric dimensions.
     """
     instructions = get_rubric_instructions("github_repo")
     if not instructions:
@@ -115,12 +80,12 @@ def RepoInvestigator(state: AgentState) -> dict[str, Any]:
             history = extract_git_history(repo_dir, max_commits=10)
             history_str = json.dumps(history, indent=2)[:2000]
 
-            combined_instruction = "\n\n".join([f"CHECK {i+1}: {c['goal']}\n{c['instruction']}" for i, c in enumerate(_REPO_CHECKS)])
+            combined_instruction = "\n\n".join([f"CHECK {i+1}: {c.get('dimension_name', 'General')}\n{c.get('forensic_instruction', '')}" for i, c in enumerate(instructions)])
 
             prompt_text = f"""You are a Forensic Code Investigator. Your mandate is strictly factual observation.
 Do NOT provide opinions, rulings, or final decisions.
 
-Your task is to perform THREE distinct forensic checks in this single response.
+Your task is to perform {len(instructions)} distinct forensic checks in this single response.
 
 ---
 {combined_instruction}
@@ -135,6 +100,7 @@ Recent Commit History (truncated):
 {history_str}
 
 For EACH check, populate a full Evidence record in the 'evidences' list:
+- dimension_name: EXACTLY the dimension name provided for this check
 - goal: restate the specific check's goal
 - found: exactly what you observed for that check
 - location: file paths / function names for that check
@@ -186,6 +152,7 @@ def DocAnalyst(state: AgentState) -> dict[str, Any]:
 
         for instruction in instructions:
             goal = instruction.get("forensic_instruction", "")
+            dimension_name = instruction.get("dimension_name", "General")
             prompt_text = f"""You are a Forensic Document Analyst. Your mandate is strictly factual observation.
 Do NOT provide opinions, rulings, or final decisions.
 
@@ -197,6 +164,7 @@ Extracted Document Text (first 3 chunks):
 {context_text}
 
 Populate EVERY field of the Evidence record:
+- dimension_name: {dimension_name}
 - goal: restate what you were looking for
 - found: exactly what you found in the text (quotes preferred)
 - location: section title, page hint, or chunk index where it appears
@@ -242,6 +210,7 @@ def VisionInspector(state: AgentState) -> dict[str, Any]:
     for instruction in instructions:
         image_path = instruction.get("target_image_path", "")
         goal = instruction.get("forensic_instruction", "Identify visual elements, structures, and anomalies.")
+        dimension_name = instruction.get("dimension_name", "General")
 
         if not image_path or not Path(image_path).exists():
             print(f"VisionInspector: Image not found at '{image_path}' — skipping this dimension.")
@@ -290,6 +259,7 @@ RAW VISUAL OBSERVATION:
 {raw_text}
 
 Populate EVERY field:
+- dimension_name: {dimension_name}
 - goal: restate what you were asked to observe
 - found: key visual elements and structures observed
 - location: image file path and any visible labels/sections

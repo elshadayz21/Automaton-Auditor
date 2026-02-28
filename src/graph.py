@@ -1,4 +1,4 @@
-"""
+r"""
 graph.py — Automaton Auditor LangGraph Definition
 
 Architecture:

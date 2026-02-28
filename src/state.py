@@ -8,6 +8,7 @@ class Evidence(BaseModel):
     Enriched with forensic-grade fields for traceability.
     """
     evidence_id: str = Field(description="Unique identifier for the evidence")
+    dimension_name: str = Field(description="Name of the rubric dimension this evidence belongs to", default="General")
     goal: str = Field(description="What the rubric dimension was looking for")
     found: str = Field(description="What was actually observed in the source artifact")
     location: str = Field(description="Where in the codebase or document this was found (file path, section, commit, etc.)")
@@ -27,17 +28,27 @@ class JudicialOpinion(BaseModel):
     Schema representing a judicial opinion or argument provided by an agent.
     """
     opinion_id: str = Field(description="Unique identifier for the judicial opinion")
+    dimension_name: str = Field(description="The rubric dimension this opinion resolves", default="General")
     agent_name: str = Field(description="Name of the agent or role providing this opinion")
+    score: int = Field(description="Score from 1 to 5", ge=1, le=5)
     argument: str = Field(description="The core argument or judicial reasoning")
     evidence_refs: list[str] = Field(default_factory=list, description="List of evidence IDs referenced in this opinion")
+
+class OpinionList(BaseModel):
+    """
+    Schema for a list of JudicialOpinion items, used for batched LLM output.
+    """
+    opinions: list[JudicialOpinion] = Field(description="List of judicial opinions")
 
 class CriterionResult(BaseModel):
     """
     Schema representing the result of evaluating a specific audit criterion.
     """
     criterion_name: str = Field(description="Name of the audit criterion being evaluated")
-    passed: bool = Field(description="Whether the criterion was met")
-    justification: str = Field(description="Explanation of why it passed or failed")
+    score: float = Field(description="Final aggregated score for this criterion")
+    dissent_summary: str | None = Field(default=None, description="Summary of dissent if variance is >= 2")
+    remediation: str = Field(description="Proposed remediation plan based on the findings")
+    opinions_dict: dict[str, JudicialOpinion] = Field(default_factory=dict, description="Map of agent name to their opinion")
 
 class AuditReport(BaseModel):
     """

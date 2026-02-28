@@ -1,31 +1,37 @@
 {
   "dimensions": [
     {
+      "dimension_name": "Core Technology Stack",
       "target_artifact": "github_repo",
       "forensic_instruction": "Identify the primary programming languages used and the overall directory structure.",
-      "target_repo_url": "https://github.com/langchain-ai/langgraph.git"
+      "target_repo_url": "https://github.com/elshadayz21/Automaton-Auditor.git"
     },
     {
+      "dimension_name": "Graph Orchestration Architecture",
       "target_artifact": "github_repo",
       "forensic_instruction": "Verify that LangGraph nodes are correctly wired: edges defined, entry/exit points set, and the graph compiles.",
-      "target_repo_url": "https://github.com/langchain-ai/langgraph.git"
+      "target_repo_url": "https://github.com/elshadayz21/Automaton-Auditor.git"
     },
     {
+      "dimension_name": "State Management Rigor",
       "target_artifact": "github_repo",
       "forensic_instruction": "Verify the AgentState uses TypedDict with annotated reducers for safe parallel state merging.",
-      "target_repo_url": "https://github.com/langchain-ai/langgraph.git"
+      "target_repo_url": "https://github.com/elshadayz21/Automaton-Auditor.git"
     },
     {
+      "dimension_name": "Safe Tool Engineering",
       "target_artifact": "github_repo",
       "forensic_instruction": "Verify that tool functions include input validation, try/except error handling, and do not expose secrets.",
-      "target_repo_url": "https://github.com/langchain-ai/langgraph.git"
+      "target_repo_url": "https://github.com/elshadayz21/Automaton-Auditor.git"
     },
     {
+      "dimension_name": "Theoretical Depth",
       "target_artifact": "pdf_report",
       "forensic_instruction": "Extract the executive summary and key findings.",
       "target_pdf_path": "sample.pdf"
     },
     {
+      "dimension_name": "Architectural Diagram Analysis",
       "target_artifact": "image",
       "forensic_instruction": "Identify the components, connections, and flow direction shown in this architecture diagram.",
       "target_image_path": "sample_diagram.png"
