@@ -12,9 +12,11 @@ repo doc vision    (fan-out: parallel detective nodes)
   \  |  /
    ▼ ▼ ▼
  aggregate          (fan-in: merges all Evidence dicts)
-   / | \
-  ▼  ▼  ▼
-pros def tech      (fan-out: parallel judicial personas)
+      │
+  evidence_gate     (conditional edge: checks if evidence exists)
+   / YES \  NO \
+  ▼  ▼  ▼      ▼
+pros def tech  ChiefJustice  (skip bench if no evidence)
   \  |  /
    ▼ ▼ ▼
  ChiefJustice       (final synthesis, no LLM)
@@ -25,7 +27,7 @@ pros def tech      (fan-out: parallel judicial personas)
 from dotenv import load_dotenv
 load_dotenv()
 
-from typing import Any
+from typing import Any, Literal
 from langgraph.graph import StateGraph, START, END
 
 from src.state import AgentState
@@ -46,10 +48,28 @@ def dispatch(state: AgentState) -> dict[str, Any]:
 # ─────────────────────────────────────────────
 def aggregate_evidences(state: AgentState) -> dict[str, Any]:
     total = len(state.get("evidences", {}))
-    print(f"[Graph] Aggregation complete — {total} evidence item(s) merged. Fanning out to Judicial Bench...")
+    print(f"[Graph] Aggregation complete — {total} evidence item(s) merged.")
     for ev_id, ev in state.get("evidences", {}).items():
         print(f"  • {ev_id}: {ev.goal[:60]}... | confidence={ev.reliability_score:.2f}")
     return {}
+
+
+# ─────────────────────────────────────────────
+# Conditional Router: evidence_gate
+# ─────────────────────────────────────────────
+def evidence_gate(state: AgentState) -> Literal["has_evidence", "no_evidence"]:
+    """
+    Conditional edge: checks if any evidence was collected by detectives.
+    If no evidence exists (e.g., due to clone failures, missing PDFs, API errors),
+    route directly to ChiefJustice, skipping the Judicial Bench entirely.
+    """
+    evidences = state.get("evidences", {})
+    if evidences:
+        print(f"[Gate] ✅ Evidence found ({len(evidences)} items). Fanning out to Judicial Bench...")
+        return "has_evidence"
+    else:
+        print("[Gate] ⚠️ No evidence collected. Skipping Judicial Bench → routing to ChiefJustice.")
+        return "no_evidence"
 
 
 # ─────────────────────────────────────────────
@@ -64,7 +84,7 @@ def build_graph():
     builder.add_node("VisionInspector",   VisionInspector)
     builder.add_node("aggregate_evidences", aggregate_evidences)
     
-    # Judicial Bench Personsas
+    # Judicial Bench Personas
     builder.add_node("Prosecutor",      Prosecutor)
     builder.add_node("DefenseAttorney", DefenseAttorney)
     builder.add_node("TechLeadJudge",   TechLeadJudge)
@@ -82,10 +102,32 @@ def build_graph():
     builder.add_edge("DocAnalyst",        "aggregate_evidences")
     builder.add_edge("VisionInspector",   "aggregate_evidences")
 
-    # 3. Fan-out Aggregate -> Judicial Bench
-    builder.add_edge("aggregate_evidences", "Prosecutor")
-    builder.add_edge("aggregate_evidences", "DefenseAttorney")
-    builder.add_edge("aggregate_evidences", "TechLeadJudge")
+    # 3. Conditional Edge: Evidence Gate
+    builder.add_conditional_edges(
+        "aggregate_evidences",
+        evidence_gate,
+        {
+            "has_evidence": "Prosecutor",       # Fan-out to all 3 judges
+            "no_evidence":  "ChiefJustice",     # Skip bench entirely
+        }
+    )
+    # Also fan-out to Defense and TechLead when evidence exists
+    builder.add_conditional_edges(
+        "aggregate_evidences",
+        evidence_gate,
+        {
+            "has_evidence": "DefenseAttorney",
+            "no_evidence":  "ChiefJustice",
+        }
+    )
+    builder.add_conditional_edges(
+        "aggregate_evidences",
+        evidence_gate,
+        {
+            "has_evidence": "TechLeadJudge",
+            "no_evidence":  "ChiefJustice",
+        }
+    )
 
     # 4. Fan-in Judicial Bench -> ChiefJustice
     builder.add_edge("Prosecutor",      "ChiefJustice")
@@ -98,3 +140,4 @@ def build_graph():
     return builder.compile()
 
 graph = build_graph()
+
