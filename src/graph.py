@@ -73,25 +73,34 @@ def evidence_gate(state: AgentState) -> Literal["has_evidence", "no_evidence"]:
 
 
 # ─────────────────────────────────────────────
+# Judicial fan-out node
+# ─────────────────────────────────────────────
+def judicial_dispatch(state: AgentState) -> dict[str, Any]:
+    print("[Graph] Judicial dispatch: fanning out to all 3 judge personas...")
+    return {}
+
+
+# ─────────────────────────────────────────────
 # Build the compiled graph
 # ─────────────────────────────────────────────
 def build_graph():
     builder = StateGraph(AgentState)
 
-    builder.add_node("dispatch",          dispatch)
-    builder.add_node("RepoInvestigator",  RepoInvestigator)
-    builder.add_node("DocAnalyst",        DocAnalyst)
-    builder.add_node("VisionInspector",   VisionInspector)
+    builder.add_node("dispatch",            dispatch)
+    builder.add_node("RepoInvestigator",    RepoInvestigator)
+    builder.add_node("DocAnalyst",          DocAnalyst)
+    builder.add_node("VisionInspector",     VisionInspector)
     builder.add_node("aggregate_evidences", aggregate_evidences)
-    
+    builder.add_node("judicial_dispatch",   judicial_dispatch)
+
     # Judicial Bench Personas
     builder.add_node("Prosecutor",      Prosecutor)
     builder.add_node("DefenseAttorney", DefenseAttorney)
     builder.add_node("TechLeadJudge",   TechLeadJudge)
-    
+
     builder.add_node("ChiefJustice",    ChiefJustice)
 
-    # 1. Dispatch to Detectives
+    # 1. Dispatch to Detectives (fan-out)
     builder.add_edge(START, "dispatch")
     builder.add_edge("dispatch", "RepoInvestigator")
     builder.add_edge("dispatch", "DocAnalyst")
@@ -103,41 +112,32 @@ def build_graph():
     builder.add_edge("VisionInspector",   "aggregate_evidences")
 
     # 3. Conditional Edge: Evidence Gate
+    #    has_evidence -> judicial_dispatch -> fan-out to all 3 judges
+    #    no_evidence  -> ChiefJustice (skip bench entirely)
     builder.add_conditional_edges(
         "aggregate_evidences",
         evidence_gate,
         {
-            "has_evidence": "Prosecutor",       # Fan-out to all 3 judges
-            "no_evidence":  "ChiefJustice",     # Skip bench entirely
-        }
-    )
-    # Also fan-out to Defense and TechLead when evidence exists
-    builder.add_conditional_edges(
-        "aggregate_evidences",
-        evidence_gate,
-        {
-            "has_evidence": "DefenseAttorney",
-            "no_evidence":  "ChiefJustice",
-        }
-    )
-    builder.add_conditional_edges(
-        "aggregate_evidences",
-        evidence_gate,
-        {
-            "has_evidence": "TechLeadJudge",
+            "has_evidence": "judicial_dispatch",
             "no_evidence":  "ChiefJustice",
         }
     )
 
-    # 4. Fan-in Judicial Bench -> ChiefJustice
+    # 4. Fan-out judicial_dispatch -> all 3 judges
+    builder.add_edge("judicial_dispatch", "Prosecutor")
+    builder.add_edge("judicial_dispatch", "DefenseAttorney")
+    builder.add_edge("judicial_dispatch", "TechLeadJudge")
+
+    # 5. Fan-in Judicial Bench -> ChiefJustice
     builder.add_edge("Prosecutor",      "ChiefJustice")
     builder.add_edge("DefenseAttorney", "ChiefJustice")
     builder.add_edge("TechLeadJudge",   "ChiefJustice")
-    
-    # 5. End
+
+    # 6. End
     builder.add_edge("ChiefJustice",    END)
 
     return builder.compile()
 
 graph = build_graph()
+
 
